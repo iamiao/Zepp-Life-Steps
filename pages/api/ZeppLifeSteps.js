@@ -4,14 +4,43 @@ const { URLSearchParams } = require('url');
 // 配置请求头
 const headers = {
   'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 9; MI 6 MIUI/20.6.18)',
-  'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+  'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+  'Accept-Encoding': 'gzip, deflate',
+  'Connection': 'keep-alive'
 };
+
+// 创建axios实例
+const axiosInstance = axios.create({
+  timeout: 30000,
+  headers: headers
+});
 
 // 获取登录code
 async function getCode(location) {
-  const codePattern = /(?<=access=).*?(?=&)/;
-  const match = location.match(codePattern);
-  return match ? match[0] : null;
+  // 检查是否包含错误信息
+  if (location.includes('error=')) {
+    const errorPattern = /error=(\d+)/;
+    const errorMatch = location.match(errorPattern);
+    if (errorMatch) {
+      throw new Error(`登录失败，错误码: ${errorMatch[1]}`);
+    }
+  }
+  
+  // 尝试多种可能的code提取模式
+  const patterns = [
+    /(?<=access=).*?(?=&|$)/,
+    /code=([^&]+)/,
+    /token=([^&]+)/
+  ];
+  
+  for (const pattern of patterns) {
+    const match = location.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  
+  throw new Error('无法从重定向URL中提取授权码');
 }
 
 // 登录获取token
@@ -37,29 +66,50 @@ async function login(account, password) {
     console.log('登录账号:', account);
 
     // 第一步：获取access code
-    const url1 = `https://api-user.huami.com/registrations/${account}/tokens`;
-    const data1 = {
-      client_id: 'HuaMi',
-      password: password,
-      redirect_uri: 'https://s3-us-west-2.amazonaws.com/hm-registration/successsignin.html',
-      token: 'access'
-    };
+    // 尝试多个可能的API端点
+    const endpoints = [
+      `https://api-user.huami.com/registrations/${account}/tokens`,
+      `https://api-user-us.huami.com/registrations/${account}/tokens`
+    ];
+    
+    let response1;
+    let url1;
+    
+    for (const endpoint of endpoints) {
+      url1 = endpoint;
+      const data1 = {
+        client_id: 'HuaMi',
+        password: password,
+        redirect_uri: 'https://s3-us-west-2.amazonaws.com/hm-registration/successsignin.html',
+        token: 'access'
+      };
 
     // 如果是手机号,添加phone_number字段
     if(isPhone) {
       data1.phone_number = account;
     }
 
-    console.log('第一步请求URL:', url1);
-    console.log('第一步请求数据:', data1);
+      console.log('第一步请求URL:', url1);
+      console.log('第一步请求数据:', data1);
 
-    const response1 = await axios.post(url1, data1, {
-      headers: headers,
-      maxRedirects: 0,
-      validateStatus: function (status) {
-        return status >= 200 && status < 400;
+      try {
+        response1 = await axiosInstance.post(url1, data1, {
+          maxRedirects: 0,
+          validateStatus: function (status) {
+            // 允许302重定向
+            return (status >= 200 && status < 400) || status === 302;
+          }
+        });
+        // 如果成功获取到响应，跳出循环
+        break;
+      } catch (error) {
+        console.warn(`尝试端点 ${url1} 失败:`, error.message);
+        // 如果是最后一个端点，抛出错误
+        if (endpoint === endpoints[endpoints.length - 1]) {
+          throw error;
+        }
       }
-    });
+    }
 
     console.log('第一步响应状态码:', response1.status);
     console.log('第一步响应头:', response1.headers);
@@ -74,11 +124,9 @@ async function login(account, password) {
 
     console.log('重定向URL:', location);
 
+    // 尝试从location中获取code
     const code = await getCode(location);
-    if (!code) {
-      console.error('获取access code失败');
-      throw new Error('获取access code失败');
-    }
+    console.log('成功获取到code:', code);
 
     console.log('获取到的code:', code);
 
@@ -136,7 +184,20 @@ async function login(account, password) {
       console.error('错误响应头:', error.response.headers);
       console.error('错误响应数据:', error.response.data);
     }
-    throw error;
+    // 提供更友好的错误信息
+    const errorMessages = {
+      '401': '账号或密码错误，请检查输入',
+      '403': '请求被拒绝，请稍后重试',
+      '429': '请求过于频繁，请稍后重试',
+      '500': '服务器内部错误，请稍后重试'
+    };
+    
+    const errorCode = error.message.match(/错误码: (\d+)/);
+    if (errorCode && errorMessages[errorCode[1]]) {
+      throw new Error(errorMessages[errorCode[1]]);
+    }
+    
+    throw new Error(`登录失败: ${error.message || '未知错误'}`);
   }
 }
 
@@ -148,8 +209,7 @@ async function getAppToken(loginToken) {
 
     console.log('获取appToken请求URL:', url);
 
-    const response = await axios.get(url, {
-      headers,
+    const response = await axiosInstance.get(url, {
       validateStatus: function (status) {
         return status >= 200 && status < 400;
       }
@@ -220,7 +280,7 @@ async function updateSteps(loginToken, appToken, steps) {
     console.log('更新步数请求URL:', url);
     console.log('更新步数请求数据:', data);
 
-    const response = await axios.post(url, data, {
+    const response = await axiosInstance.post(url, data, {
       headers: {
         ...headers,
         apptoken: appToken
