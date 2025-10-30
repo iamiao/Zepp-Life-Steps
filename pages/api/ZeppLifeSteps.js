@@ -152,13 +152,13 @@ async function login(account, password) {
     console.log('获取到的code:', code);
 
     // 第二步：获取login token
-    const endpoints = [
+    const loginEndpoints = [
       'https://account.huami.com/v2/client/login',
       'https://account-us.huami.com/v2/client/login'
     ];
     let response2;
     
-    for (const loginUrl of endpoints) {
+    for (const loginUrl of loginEndpoints) {
       const data2 = {
         allow_registration: 'false',
         app_name: 'com.xiaomi.hm.health',
@@ -349,13 +349,13 @@ async function updateSteps(loginToken, appToken, steps) {
     console.log('更新步数响应头:', response.headers);
     console.log('更新步数响应数据:', response.data);
 
-    if (response.data.code !== 1) {
-      console.error('更新步数失败:', response.data);
-      throw new Error('更新步数失败: ' + JSON.stringify(response.data));
+    if (response.data.code === 0 || response.data.code === 200) {
+      console.log('步数更新成功');
+      return { success: true, message: '步数更新成功' };
+    } else {
+      console.error('步数更新失败:', response.data);
+      throw new Error(`步数更新失败: ${response.data.message || '未知错误'}`);
     }
-
-    console.log('更新步数成功');
-    return response.data;
   } catch (error) {
     console.error('更新步数失败:', error.message);
     if (error.response) {
