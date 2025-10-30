@@ -92,22 +92,43 @@ async function login(account, password) {
       console.log('第一步请求URL:', url1);
       console.log('第一步请求数据:', data1);
 
+      let continueLoop = false;
       try {
-        response1 = await axiosInstance.post(url1, data1, {
+        // 准备请求参数，使用URLSearchParams格式化
+        const searchParams = new URLSearchParams();
+        for (const [key, value] of Object.entries(data1)) {
+          searchParams.append(key, value);
+        }
+        
+        console.log(`尝试端点 ${url1}，参数:`, searchParams.toString());
+        
+        response1 = await axiosInstance.post(url1, searchParams.toString(), {
           maxRedirects: 0,
           validateStatus: function (status) {
-            // 允许302重定向
-            return (status >= 200 && status < 400) || status === 302;
+            // 允许302重定向和401（用于调试）
+            return (status >= 200 && status < 400) || status === 302 || status === 401;
           }
         });
-        // 如果成功获取到响应，跳出循环
-        break;
+        
+        console.log(`端点 ${url1} 响应状态码:`, response1.status);
+        
+        // 如果是401，记录但继续尝试下一个端点
+        if (response1.status === 401) {
+          console.warn(`端点 ${url1} 返回401未授权`);
+          continueLoop = true;
+        } else if (response1.headers.location) {
+          // 如果成功获取到响应且有location头，跳出循环
+          console.log(`在端点 ${url1} 成功获取到location头`);
+          break;
+        }
       } catch (error) {
         console.warn(`尝试端点 ${url1} 失败:`, error.message);
-        // 如果是最后一个端点，抛出错误
-        if (endpoint === endpoints[endpoints.length - 1]) {
-          throw error;
-        }
+        continueLoop = true;
+      }
+      
+      if (continueLoop) {
+        // 继续循环下一个端点
+        continue;
       }
     }
 
@@ -131,22 +152,28 @@ async function login(account, password) {
     console.log('获取到的code:', code);
 
     // 第二步：获取login token
-    const url2 = 'https://account.huami.com/v2/client/login';
-    const data2 = {
-      allow_registration: 'false',
-      app_name: 'com.xiaomi.hm.health',
-      app_version: '6.3.5',
-      code: code,
-      country_code: 'CN',
-      device_id: '2C8B4939-0CCD-4E94-8CBA-CB8EA6E613A1',
-      device_model: 'phone',
-      dn: 'api-user.huami.com%2Capi-mifit.huami.com%2Capp-analytics.huami.com',
-      grant_type: 'access_token',
-      lang: 'zh_CN',
-      os_version: '1.5.0',
-      source: 'com.xiaomi.hm.health',
-      third_name: isPhone ? 'huami_phone' : 'email'
-    };
+    const endpoints = [
+      'https://account.huami.com/v2/client/login',
+      'https://account-us.huami.com/v2/client/login'
+    ];
+    let response2;
+    
+    for (const loginUrl of endpoints) {
+      const data2 = {
+        allow_registration: 'false',
+        app_name: 'com.xiaomi.hm.health',
+        app_version: '6.3.5',
+        code: code,
+        country_code: 'CN',
+        device_id: '2C8B4939-0CCD-4E94-8CBA-CB8EA6E613A1',
+        device_model: 'phone',
+        dn: 'api-user.huami.com%2Capi-mifit.huami.com%2Capp-analytics.huami.com',
+        grant_type: 'access_token',
+        lang: 'zh_CN',
+        os_version: '1.5.0',
+        source: 'com.xiaomi.hm.health',
+        third_name: isPhone ? 'huami_phone' : 'email'
+      };
 
       console.log('第二步请求URL:', loginUrl);
       console.log('第二步请求数据:', data2);
@@ -157,6 +184,7 @@ async function login(account, password) {
         searchParams.append(key, value);
       }
 
+      let continueLoop = false;
       try {
         response2 = await axiosInstance.post(loginUrl, searchParams.toString(), {
           validateStatus: function (status) {
@@ -166,19 +194,22 @@ async function login(account, password) {
         
         console.log(`登录端点 ${loginUrl} 响应状态码:`, response2.status);
         
-        // 如果是401，继续尝试下一个端点
+        // 如果是401，记录并继续到下一个端点
         if (response2.status === 401) {
           console.warn(`登录端点 ${loginUrl} 返回401未授权`);
-          continue;
-        }
-        
-        // 检查响应数据是否有效
-        if (response2.data && response2.data.token_info) {
+          continueLoop = true;
+        } else if (response2.data && response2.data.token_info) {
+          // 检查响应数据是否有效
           break;
         }
       } catch (error) {
         console.warn(`尝试登录端点 ${loginUrl} 失败:`, error.message);
-        // 继续尝试下一个端点
+        continueLoop = true;
+      }
+      
+      if (!continueLoop && response2.data && response2.data.token_info) {
+        // 找到有效响应，跳出循环
+        break;
       }
     }
 
