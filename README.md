@@ -8,10 +8,7 @@
 > 通过华米运动的 API 提交运动步数 😒
 > 可实现同步运动步数至微信、支付宝等
 
-## 📱 在线体验
 
-- [Web 版本](https://steps.luozhinet.com)
-- 微信小程序：扫描下方二维码
 
 ## ✨ 功能特点
 
@@ -22,11 +19,7 @@
 - 📊 支持历史记录查看
 - 🔄 自动同步到微信、支付宝运动
 
-## 📱 微信小程序版本
 
-扫描下方二维码，即可使用微信小程序版本，随时随地修改步数！
-
-![微信小程序二维码](https://jsdelivr.luozhinet.com/gh/miloce/Zepp-Life-Steps/img/MiniProgramCode.png)
 
 ## 📖 使用方法
 
@@ -70,7 +63,7 @@ npm run dev
 
 想要自己部署一个实例？超级简单！
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/miloce/Zepp-Life-Steps.git)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/import/project?template=https://github.com/iamiao/Zepp-Life-Steps.git)
 
 1. 将代码推送到 GitHub 仓库
 2. 在 Vercel 中导入该仓库
