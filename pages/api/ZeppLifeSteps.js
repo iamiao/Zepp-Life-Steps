@@ -148,15 +148,39 @@ async function login(account, password) {
       third_name: isPhone ? 'huami_phone' : 'email'
     };
 
-    console.log('第二步请求URL:', url2);
-    console.log('第二步请求数据:', data2);
-
-    const response2 = await axios.post(url2, data2, {
-      headers,
-      validateStatus: function (status) {
-        return status >= 200 && status < 400;
+      console.log('第二步请求URL:', loginUrl);
+      console.log('第二步请求数据:', data2);
+      
+      // 准备请求参数
+      const searchParams = new URLSearchParams();
+      for (const [key, value] of Object.entries(data2)) {
+        searchParams.append(key, value);
       }
-    });
+
+      try {
+        response2 = await axiosInstance.post(loginUrl, searchParams.toString(), {
+          validateStatus: function (status) {
+            return (status >= 200 && status < 400) || status === 401;
+          }
+        });
+        
+        console.log(`登录端点 ${loginUrl} 响应状态码:`, response2.status);
+        
+        // 如果是401，继续尝试下一个端点
+        if (response2.status === 401) {
+          console.warn(`登录端点 ${loginUrl} 返回401未授权`);
+          continue;
+        }
+        
+        // 检查响应数据是否有效
+        if (response2.data && response2.data.token_info) {
+          break;
+        }
+      } catch (error) {
+        console.warn(`尝试登录端点 ${loginUrl} 失败:`, error.message);
+        // 继续尝试下一个端点
+      }
+    }
 
     console.log('第二步响应状态码:', response2.status);
     console.log('第二步响应头:', response2.headers);
